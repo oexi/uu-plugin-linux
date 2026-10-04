@@ -5,6 +5,8 @@
 #   uuplugin 以 "XTABLES_LIBDIR=/lib iptables ..." 方式调用，这在 Debian/Ubuntu 等发行版上
 #   会让 iptables 找不到扩展模块（--dport、-m mac、-j MARK、-j DNAT 全部报错），
 #   这里清掉该变量后再执行系统真正的命令。
+#   Docker 镜像在内核没有 nf_tables 时改用 legacy 后端（UU_IPT_BACKEND=legacy），
+#   插件直接调用 xtables-nft-multi 时也换成 xtables-legacy-multi。
 # brctl：
 #   插件会执行 "brctl show | cut -f1 | grep br- | head -n1" 猜 LAN 网桥，宿主机上 docker
 #   的 br-xxxx 网桥可能被误选。LAN 口已通过 uu.conf 的 lan_ifname 指定，这里什么都不返回。
@@ -16,6 +18,7 @@ if [ "$name" = "brctl" ]; then
 fi
 
 unset XTABLES_LIBDIR
+[ "$name" = xtables-nft-multi ] && [ "$UU_IPT_BACKEND" = legacy ] && name=xtables-legacy-multi
 for d in /usr/sbin /sbin /usr/bin /bin /usr/local/sbin /usr/local/bin; do
     if [ -x "$d/$name" ]; then
         exec "$d/$name" "$@"

@@ -17,4 +17,13 @@ Verified on Ubuntu 24.04 arm64 and armhf (systemd containers + simulated LAN):
 - Dual-stack network: AAAA queries to this machine return no addresses while A queries work; no IPv6 forwarding or router advertisements;
   leftover IPv6 forwarding rules from the earlier RA-based version are removed on upgrade
 
+Docker image (Docker on an arm64 host, container on a bridge network as the LAN):
+
+- arm64 and arm/v7 images: SN file generated on first start, plugin downloaded and logged in (`uu_status=0`), plugin iptables rules added
+- `--privileged` (like RouterOS) and unprivileged (`NET_ADMIN` + `/dev/net/tun` + `--sysctl`); nft and legacy iptables backends
+- A LAN client with gateway/DNS pointed at the container gets internet access; AAAA filtering; environment variables override `uu.conf`
+- Restart reuses the cached package from `/etc/uu/cache`; an SN file with the wrong `productname` is corrected and the right plugin downloaded;
+  `docker stop` stops the plugin and dnsmasq cleanly
+- Not verified: an actual RouterOS device, macvlan (`docker-compose.yml`)
+
 **Not verified**: binding in the phone app and real game acceleration (requires a real LAN, a UU account and game devices); please test after deployment.

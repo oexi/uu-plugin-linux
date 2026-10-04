@@ -4,7 +4,7 @@
 UU_HOME="/opt/uu"
 UU_CONF="/etc/uu/uu.conf"
 UU_FACTORYINFO="/etc/uu/factoryinfo"
-UU_STATE_DIR="/var/lib/uu"           # 持久化：插件安装包缓存（断网时也能启动）
+UU_STATE_DIR="${UU_STATE_DIR:-/var/lib/uu}"   # 持久化：插件安装包缓存（断网时也能启动）；Docker 镜像里在 /etc/uu/cache
 UU_RUN_DIR="/run/uu"
 
 # 以下路径是插件二进制里写死的，不能改
@@ -19,8 +19,16 @@ GUARDIAN_COMM="xuplugin-guardi"
 PLUGIN_CONF="uu.conf"
 UPDATE_FILE="uu.update"
 
+# Docker 镜像里没有 journald，入口脚本设置 UU_LOG_FILE，uuctl log 读这个文件
 log() {
     echo "$*"
+    [ -n "$UU_LOG_FILE" ] && echo "$(date '+%F %T') $*" >> "$UU_LOG_FILE"
+    return 0
+}
+
+# 是否由 systemd 管理（否则是 Docker 镜像，由 uu-docker.sh 管理）
+under_systemd() {
+    [ -d /run/systemd/system ]
 }
 
 load_conf() {
@@ -34,6 +42,10 @@ load_conf() {
     UPDATE_WAIT=120
     # shellcheck disable=SC1090
     [ -f "$UU_CONF" ] && . "$UU_CONF"
+    # Docker 镜像：容器环境变量覆盖 uu.conf（uu-docker.sh 启动时生成）
+    # shellcheck disable=SC1090
+    [ -f "$UU_RUN_DIR/env.conf" ] && . "$UU_RUN_DIR/env.conf"
+    return 0
 }
 
 # 网卡（按主名或 altname）是否存在

@@ -18,14 +18,15 @@ IP6T="ip6tables -w"
 
 sysctl_set() {
     local f="/proc/sys/$1"
-    [ -w "$f" ] && [ "$(cat "$f")" != "$2" ] && echo "$2" > "$f"
+    # 容器里 /proc/sys 可能只读（root 下 -w 仍为真），写失败忽略
+    [ -w "$f" ] && [ "$(cat "$f")" != "$2" ] && echo "$2" 2>/dev/null > "$f"
     return 0
 }
 
 # 严格反向路径过滤会丢弃插件 tun 口回来的包，放宽为 loose
 rp_loose() {
     local f="/proc/sys/net/ipv4/conf/$1/rp_filter"
-    [ -w "$f" ] && [ "$(cat "$f")" = "1" ] && echo 2 > "$f"
+    [ -w "$f" ] && [ "$(cat "$f")" = "1" ] && echo 2 2>/dev/null > "$f"
     return 0
 }
 
@@ -93,7 +94,7 @@ rules_up() {
     fi
 
     # 只接管 IPv4：IPv6 不转发，只放行本机 DNS
-    command -v ip6tables >/dev/null 2>&1 || return 0
+    ip6t_ok || return 0
     rules_in "$IP6T"
     # 清理旧版本（RA 方式 IPv6 网关）留下的规则
     jump_del "$IP6T" filter FORWARD UU_GW_FWD
@@ -104,7 +105,7 @@ rules_down() {
     jump_del "$IPT" filter INPUT UU_GW_IN
     jump_del "$IPT" filter FORWARD UU_GW_FWD
     jump_del "$IPT" nat POSTROUTING UU_GW_NAT
-    command -v ip6tables >/dev/null 2>&1 || return 0
+    ip6t_ok || return 0
     jump_del "$IP6T" filter INPUT UU_GW_IN
     jump_del "$IP6T" filter FORWARD UU_GW_FWD
     jump_del "$IP6T" filter OUTPUT UU_GW_OUT
@@ -116,9 +117,14 @@ rules_present() {
         $IPT -C FORWARD -j UU_GW_FWD 2>/dev/null || return 1
         $IPT -t nat -C POSTROUTING -j UU_GW_NAT 2>/dev/null || return 1
     fi
-    command -v ip6tables >/dev/null 2>&1 || return 0
+    ip6t_ok || return 0
     $IP6T -C INPUT -j UU_GW_IN 2>/dev/null || return 1
     return 0
+}
+
+# ip6tables 可用（容器用 legacy 后端时内核可能没有 ip6_tables 模块）
+ip6t_ok() {
+    command -v ip6tables >/dev/null 2>&1 && $IP6T -S INPUT >/dev/null 2>&1
 }
 
 # ---------- 命令 ----------

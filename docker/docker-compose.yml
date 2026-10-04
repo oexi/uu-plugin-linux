@@ -1,0 +1,28 @@
+# The container must be on the LAN subnet: macvlan gives it its own LAN IP, which clients use as gateway and DNS.
+# Note: with macvlan the Docker host itself cannot reach the container's IP (a macvlan limitation).
+services:
+  uu:
+    image: ghcr.io/oexi/uu-plugin-linux-arm64:latest
+    container_name: uu
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    sysctls:
+      - net.ipv4.ip_forward=1
+    volumes:
+      - ./uu:/etc/uu
+    networks:
+      lan:
+        ipv4_address: 192.168.1.2
+
+networks:
+  lan:
+    driver: macvlan
+    driver_opts:
+      parent: eth0
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+          gateway: 192.168.1.1

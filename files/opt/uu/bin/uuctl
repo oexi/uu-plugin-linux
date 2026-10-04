@@ -21,8 +21,13 @@ cmd_status() {
     [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = uuplugin ] || pid=""
     ver=$(sed -n 's/^version=//p' "${RUNNING_DIR}/${PLUGIN_CONF}" 2>/dev/null)
     st=$(cat "${RUNNING_DIR}/uu_status" 2>/dev/null)
-    echo "服务:       $(systemctl is-active uu.service) / 开机自启 $(systemctl is-enabled uu.service 2>/dev/null)"
-    echo "DNS 服务:   $(systemctl is-active uu-dns.service)"
+    if under_systemd; then
+        echo "服务:       $(systemctl is-active uu.service) / 开机自启 $(systemctl is-enabled uu.service 2>/dev/null)"
+        echo "DNS 服务:   $(systemctl is-active uu-dns.service)"
+    else
+        echo "运行方式:   Docker 容器"
+        echo "DNS 服务:   $(pgrep -x dnsmasq >/dev/null && echo 运行中 || echo 未运行)"
+    fi
     echo "插件进程:   ${pid:-未运行}"
     echo "插件版本:   ${ver:-未知}"
     echo "uu_status:  ${st:-无}  (0 = 正常)"
@@ -37,12 +42,35 @@ cmd_status() {
 }
 
 cmd_update() {
-    systemctl is-active -q uu.service || { echo "uu 服务未运行"; exit 1; }
+    if under_systemd; then
+        systemctl is-active -q uu.service || { echo "uu 服务未运行"; exit 1; }
+    fi
     # 插件自身发现新版时也是写这个标记并退出
     touch "${RUNNING_DIR}/${UPDATE_FILE}"
     pkill -x uuplugin
     echo "已触发更新，查看进度: uuctl log"
 }
+
+# Docker 镜像：没有 systemd，由 uu-docker.sh 管理（容器本身的启停/自启由容器运行时负责）
+container_cmd() {
+    case "$1" in
+        status)  cmd_status ;;
+        log)     exec tail -n 50 -F "${UU_LOG_FILE:-/var/log/uu.log}" ;;
+        restart)
+            # monitor 每分钟检查一次，发现插件退出后重新拉起
+            pkill -x uuplugin
+            echo "已停止插件，1 分钟内会自动重新拉起，查看进度: uuctl log"
+            ;;
+        update)  cmd_update ;;
+        start|stop|enable|disable)
+            echo "容器内不支持 $1，请启停容器本身（docker / RouterOS /container）"
+            exit 1
+            ;;
+        *)       usage; exit 1 ;;
+    esac
+    exit
+}
+under_systemd || container_cmd "$@"
 
 [ "$(id -u)" = 0 ] || { [ "$1" = status ] || [ "$1" = log ] || { echo "请用 root 运行"; exit 1; }; }
 
