@@ -1,9 +1,10 @@
 #!/bin/sh
-# 网易 UU 加速插件（H3C NX30Pro 移植版）Linux arm64 安装脚本
+# 网易 UU 加速插件（H3C 路由器版移植）Linux 安装脚本，支持 arm64（aarch64）和 armv7
 #
 #   sudo ./install.sh                         # 安装并启动，开机自启
 #   sudo ./install.sh --factoryinfo FILE      # 使用已有的 SN 文件（默认按本机 LAN 网卡 MAC 生成）
 #   sudo ./install.sh --lan-if eth0           # 指定局域网网卡（默认取默认路由所在网卡）
+#   sudo ./install.sh --arch arm              # 指定插件架构 aarch64|arm（默认按本机自动选择）
 #   sudo ./install.sh --no-start              # 只安装不启动
 
 set -e
@@ -12,13 +13,15 @@ SRC=$(pwd)
 
 FACTORYINFO=""
 LAN_IF_ARG=""
+ARCH=""
 NO_START=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --factoryinfo) FACTORYINFO=$2; shift 2 ;;
         --lan-if)      LAN_IF_ARG=$2; shift 2 ;;
+        --arch)        ARCH=$2; shift 2 ;;
         --no-start)    NO_START=1; shift ;;
-        -h|--help)     sed -n '2,9p' "$0"; exit 0 ;;
+        -h|--help)     sed -n '2,10p' "$0"; exit 0 ;;
         *) echo "未知参数: $1" >&2; exit 2 ;;
     esac
 done
@@ -27,8 +30,23 @@ info() { echo "==> $*"; }
 die()  { echo "ERROR: $*" >&2; exit 1; }
 
 [ "$(id -u)" = 0 ] || die "请用 root 运行（sudo $0）"
-[ "$(uname -m)" = aarch64 ] || die "仅支持 aarch64 (arm64)，当前为 $(uname -m)"
 [ -d /run/systemd/system ] || die "需要 systemd"
+
+. "$SRC/files/opt/uu/bin/uu-common.sh"
+
+# ---------- 架构 ----------
+# aarch64：H3C NX30Pro 版；armv7：H3C BX54 版
+[ -n "$ARCH" ] || ARCH=$(detect_plugin_arch) || die "不支持的架构 $(uname -m)（只支持 aarch64 和 armv7）"
+case "$ARCH" in
+    aarch64|arm) ;;
+    *) die "--arch 只能是 aarch64 或 arm" ;;
+esac
+if [ "$ARCH" = arm ] && grep -qs '^CPU architecture:[[:space:]]*[1-6]$' /proc/cpuinfo; then
+    die "armv7 版插件需要 ARMv7 及以上的 CPU（树莓派 1 / Zero 等 ARMv6 不支持）"
+fi
+MODEL=$(arch_model "$ARCH")
+LDSO_NAME=$(arch_ldso "$ARCH")
+info "架构: $(uname -m)，使用 H3C ${MODEL} 版（${ARCH}）插件"
 
 # ---------- 依赖 ----------
 need=""
@@ -60,23 +78,29 @@ if [ -n "$need" ]; then
 fi
 
 # ---------- musl 运行时（H3C 版插件是 musl 动态链接程序）----------
-MUSL_DIR=/opt/uu/musl/lib
-LDSO=/lib/ld-musl-aarch64.so.1
-mkdir -p "$MUSL_DIR"
-if [ ! -f "$SRC/runtime/ld-musl-aarch64.so.1" ]; then
-    info "包内无 musl 运行时，从 Alpine 镜像下载"
-    sh "$SRC/fetch-runtime.sh" "$SRC/runtime" || die "下载 musl 运行时失败"
+# 每个架构单独目录，互不影响
+MUSL_DIR=/opt/uu/musl/$ARCH
+LDSO=/lib/$LDSO_NAME
+PATHFILE=/etc/$(echo "$LDSO_NAME" | sed 's/\.so\.1$/.path/')
+if [ ! -f "$SRC/runtime/$ARCH/$LDSO_NAME" ]; then
+    info "包内无 $ARCH musl 运行时，在线下载"
+    sh "$SRC/fetch-runtime.sh" "$ARCH" "$SRC/runtime/$ARCH" || die "下载 musl 运行时失败"
 fi
-cp -f "$SRC/runtime/ld-musl-aarch64.so.1" "$SRC/runtime/libgcc_s.so.1" "$SRC/runtime/libstdc++.so.6" "$MUSL_DIR/"
+rm -rf "$MUSL_DIR"
+mkdir -p "$MUSL_DIR"
+cp -f "$SRC/runtime/$ARCH"/* "$MUSL_DIR/"
 chmod 755 "$MUSL_DIR"/*
-if [ -e "$LDSO" ] && [ "$(readlink -f "$LDSO")" != "$MUSL_DIR/ld-musl-aarch64.so.1" ]; then
+if [ -e "$LDSO" ] && ! readlink -f "$LDSO" | grep -q '^/opt/uu/musl/'; then
     info "系统已有 $LDSO，保留并复用"
 else
-    ln -sf "$MUSL_DIR/ld-musl-aarch64.so.1" "$LDSO"
+    ln -sf "$MUSL_DIR/$LDSO_NAME" "$LDSO"
 fi
 # musl 动态链接器的库搜索路径（不影响 glibc 程序）
-touch /etc/ld-musl-aarch64.path
-grep -qx "$MUSL_DIR" /etc/ld-musl-aarch64.path || echo "$MUSL_DIR" >> /etc/ld-musl-aarch64.path
+touch "$PATHFILE"
+sed -i '\#^/opt/uu/musl/#d' "$PATHFILE"
+echo "$MUSL_DIR" >> "$PATHFILE"
+# 旧版本把 aarch64 运行时放在 /opt/uu/musl/lib
+rm -rf /opt/uu/musl/lib
 
 # ---------- 程序文件 ----------
 info "安装程序到 /opt/uu"
@@ -105,7 +129,6 @@ if [ -n "$LAN_IF_ARG" ]; then
     sed -i "s/^LAN_IF=.*/LAN_IF=\"$LAN_IF_ARG\"/" /etc/uu/uu.conf
 fi
 
-. /opt/uu/bin/uu-common.sh
 load_conf
 detect_lan_if || die "找不到局域网网卡，请用 --lan-if 指定"
 info "局域网网卡: $LAN_IF $(lan_addr)"
@@ -117,13 +140,19 @@ if [ -n "$FACTORYINFO" ]; then
 elif [ ! -f /etc/uu/factoryinfo ]; then
     mac=$(cat "/sys/class/net/$LAN_IF/address")
     cat > /etc/uu/factoryinfo <<EOF
-productname=NX30Pro
+productname=$MODEL
 ethaddr=$mac
 hardversion=VER.A
 bootversion=100
 manucode=$mac
 EOF
     info "已按 $LAN_IF 的 MAC ($mac) 生成 SN 文件 /etc/uu/factoryinfo"
+fi
+# productname 决定下载哪个架构的插件，必须和本机匹配（SN 不变，App 里的绑定不受影响）
+cur=$(factory_get productname)
+if [ "$(model_arch "$cur")" != "$ARCH" ]; then
+    sed -i "s/^productname=.*/productname=$MODEL/" /etc/uu/factoryinfo
+    info "SN 文件 productname 由 ${cur:-空} 改为 $MODEL（与本机架构匹配）"
 fi
 chmod 644 /etc/uu/factoryinfo
 
@@ -137,7 +166,7 @@ modprobe nf_conntrack_netlink 2>/dev/null || true
 [ -c /dev/net/tun ] || die "/dev/net/tun 不可用（内核需要 TUN 支持）"
 
 # ---------- 自检：musl 运行时 ----------
-"$LDSO" 2>&1 | grep -qi musl || die "musl 动态链接器无法运行"
+"$LDSO" 2>&1 | grep -qi musl || die "musl 动态链接器 $LDSO 无法运行"
 
 # ---------- systemd ----------
 info "安装 systemd 服务"

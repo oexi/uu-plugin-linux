@@ -139,7 +139,13 @@ install_backtar() {
         return 1
     fi
     chmod 755 "${RUNNING_DIR}/${PLUGIN_EXE}" "${RUNNING_DIR}/xuplugin-guardian" 2>/dev/null
-    log "已安装插件 $(plugin_version)"
+    local arch
+    arch=$(elf_arch "${RUNNING_DIR}/${PLUGIN_EXE}")
+    if [ ! -e "/lib/$(arch_ldso "$arch")" ]; then
+        log "ERROR: 插件是 ${arch} 架构，本机没有对应的 musl 运行时（/lib/$(arch_ldso "$arch")）。" \
+            "请检查 ${UU_FACTORYINFO} 的 productname 是否与本机架构匹配，或重新运行 install.sh"
+    fi
+    log "已安装插件 $(plugin_version)（${arch}）"
     return 0
 }
 
@@ -193,10 +199,10 @@ stop_acc() {
     fi
     # 兜底：清理残留进程（包括上一次运行遗留的）
     pkill -x "$PLUGIN_EXE" 2>/dev/null
-    pkill -x xuplugin-guardian 2>/dev/null
+    pkill -x "$GUARDIAN_COMM" 2>/dev/null
     sleep 0.5
     pkill -KILL -x "$PLUGIN_EXE" 2>/dev/null
-    pkill -KILL -x xuplugin-guardian 2>/dev/null
+    pkill -KILL -x "$GUARDIAN_COMM" 2>/dev/null
     PLUGIN_PID=""
 }
 

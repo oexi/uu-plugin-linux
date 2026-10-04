@@ -26,7 +26,10 @@ cmd_status() {
     echo "插件进程:   ${pid:-未运行}"
     echo "插件版本:   ${ver:-未知}"
     echo "uu_status:  ${st:-无}  (0 = 正常)"
+    local arch
+    arch=$(model_arch "$(factory_get productname)")
     echo "设备型号:   $(factory_get productname)  SN: $(factory_get manucode)"
+    echo "插件架构:   ${arch:-未知}（本机 $(uname -m)）"
     echo "LAN 网卡:   ${LAN_IF:-未找到} $(lan_addr)"
     echo "过滤 AAAA:  $([ "$FILTER_AAAA" = 1 ] && echo 开启 || echo 关闭)  (DNS 指向本机的设备只走 IPv4)"
     echo

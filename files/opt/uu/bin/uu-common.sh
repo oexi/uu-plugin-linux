@@ -14,6 +14,8 @@ H3C_INFO="/var/tmp/uu/h3c_info"
 PID_FILE="/var/run/uuplugin.pid"
 LANDEV_FILE="/var/run/landevname.txt"
 PLUGIN_EXE="uuplugin"
+# 内核进程名最长 15 个字符，xuplugin-guardian 显示为 xuplugin-guardi（pkill -x 按这个匹配）
+GUARDIAN_COMM="xuplugin-guardi"
 PLUGIN_CONF="uu.conf"
 UPDATE_FILE="uu.update"
 
@@ -63,6 +65,52 @@ lan_addr() {
 # 输出 LAN 网段，如 192.168.1.0/24
 lan_cidr() {
     ip -4 -o route show dev "$LAN_IF" scope link proto kernel 2>/dev/null | awk '$1 ~ /\// {print $1; exit}'
+}
+
+# ---------- 架构 ----------
+# 只用 H3C 品牌版插件（通用 OpenWrt 版不支持 PC 加速）：
+#   aarch64  H3C NX30Pro 版（musl）
+#   arm      H3C BX54 版（armv7，musl，soft-float ABI）
+
+# 本机应使用的插件架构
+detect_plugin_arch() {
+    case "$(uname -m)" in
+        aarch64|arm64)  echo aarch64 ;;
+        armv7*|armv8l)  echo arm ;;
+        *) return 1 ;;
+    esac
+}
+
+# 插件架构 -> H3C 型号（决定下载哪个插件包）
+arch_model() {
+    case "$1" in
+        aarch64) echo NX30Pro ;;
+        arm)     echo BX54 ;;
+    esac
+}
+
+# H3C 型号 -> 插件架构
+model_arch() {
+    case "$(echo "$1" | tr 'A-Z' 'a-z')" in
+        nx30pro)    echo aarch64 ;;
+        bx54|bx30)  echo arm ;;
+    esac
+}
+
+arch_ldso() {
+    case "$1" in
+        aarch64) echo ld-musl-aarch64.so.1 ;;
+        arm)     echo ld-musl-arm.so.1 ;;
+    esac
+}
+
+# ELF 文件的架构：aarch64 / arm / 其它
+elf_arch() {
+    case "$(od -An -tx1 -j18 -N2 "$1" 2>/dev/null | tr -d ' \n')" in
+        b700) echo aarch64 ;;
+        2800) echo arm ;;
+        *)    echo unknown ;;
+    esac
 }
 
 factory_get() {

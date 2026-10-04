@@ -10,15 +10,17 @@ systemctl daemon-reload
 # 服务停止时 uu-gateway.sh down 已清理规则，这里再兜底一次
 [ -x /opt/uu/bin/uu-gateway.sh ] && /opt/uu/bin/uu-gateway.sh down >/dev/null 2>&1
 pkill -KILL -x uuplugin 2>/dev/null
-pkill -KILL -x xuplugin-guardian 2>/dev/null
+pkill -KILL -x xuplugin-guardi 2>/dev/null   # 进程名被内核截断为 15 字符
 
-if [ "$(readlink -f /lib/ld-musl-aarch64.so.1)" = /opt/uu/musl/lib/ld-musl-aarch64.so.1 ]; then
-    rm -f /lib/ld-musl-aarch64.so.1
-fi
-if [ -f /etc/ld-musl-aarch64.path ]; then
-    sed -i '\#^/opt/uu/musl/lib$#d' /etc/ld-musl-aarch64.path
-    [ -s /etc/ld-musl-aarch64.path ] || rm -f /etc/ld-musl-aarch64.path
-fi
+for n in aarch64 arm; do
+    if readlink -f "/lib/ld-musl-$n.so.1" | grep -q '^/opt/uu/musl/'; then
+        rm -f "/lib/ld-musl-$n.so.1"
+    fi
+    if [ -f "/etc/ld-musl-$n.path" ]; then
+        sed -i '\#^/opt/uu/musl/#d' "/etc/ld-musl-$n.path"
+        [ -s "/etc/ld-musl-$n.path" ] || rm -f "/etc/ld-musl-$n.path"
+    fi
+done
 
 rm -rf /opt/uu /var/lib/uu /var/tmp/uu /var/tmp/plugmnt /tmp/uu
 rm -f /usr/local/bin/uuctl /etc/modules-load.d/uu.conf /var/run/uuplugin.pid /var/run/landevname.txt

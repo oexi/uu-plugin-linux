@@ -1,5 +1,5 @@
 [Unit]
-Description=NetEase UU game accelerator plugin (H3C NX30Pro port)
+Description=NetEase UU game accelerator plugin (H3C router build port)
 Documentation=file:///opt/uu/README.md
 Wants=network-online.target uu-dns.service
 After=network-online.target
