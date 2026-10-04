@@ -28,10 +28,9 @@ sudo ./install.sh
 
 Options: `--lan-if eth0` (LAN interface), `--factoryinfo FILE` (reuse an existing SN file), `--arch aarch64|arm`, `--no-start`.
 
-### Docker / RouterOS container
+### Docker
 
-Multi-arch image `ghcr.io/oexi/uu-plugin-linux-arm64` (arm64, armv7) for RouterOS `/container` and other hosts without systemd,
-see [Docker image](docs/docker.md).
+Alternatively, run the multi-arch image `ghcr.io/oexi/uu-plugin-linux-arm64` (arm64, armv7), see [Docker image](docs/docker.md).
 
 ## Set up LAN devices
 
@@ -54,7 +53,7 @@ sudo ./uninstall.sh            # keeps /etc/uu; add --purge to remove it
 
 ## Docs
 
-- [Docker image](docs/docker.md): RouterOS container, docker compose, environment variables
+- [Docker image](docs/docker.md): running in a container, environment variables
 - [Configuration](docs/configuration.md): `/etc/uu/uu.conf` options and the SN file
 - [IPv6](docs/ipv6.md): how IPv6 is handled
 - [Why the H3C build](docs/why-h3c.md): why the generic OpenWrt build cannot accelerate PCs
