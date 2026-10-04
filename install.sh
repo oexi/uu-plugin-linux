@@ -115,6 +115,7 @@ for n in iptables ip6tables xtables-nft-multi brctl; do
 done
 ln -sf /opt/uu/bin/uuctl /usr/local/bin/uuctl
 cp -f "$SRC/README.md" /opt/uu/README.md
+rm -rf /opt/uu/docs && cp -r "$SRC/docs" /opt/uu/docs
 
 # ---------- 配置 ----------
 mkdir -p /etc/uu
