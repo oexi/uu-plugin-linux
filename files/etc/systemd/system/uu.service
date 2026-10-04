@@ -1,0 +1,19 @@
+[Unit]
+Description=NetEase UU game accelerator plugin (H3C NX30Pro port)
+Documentation=file:///opt/uu/README.md
+Wants=network-online.target uu-dns.service
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStartPre=/opt/uu/bin/uu-gateway.sh up
+ExecStart=/opt/uu/bin/uu-monitor.sh
+ExecStopPost=/opt/uu/bin/uu-gateway.sh down
+# 先只给 monitor 发 SIGTERM，由它让 uuplugin 正常退出并清理规则
+KillMode=mixed
+TimeoutStopSec=30
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

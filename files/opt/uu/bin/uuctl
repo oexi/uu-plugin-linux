@@ -1,0 +1,57 @@
+#!/bin/sh
+# UU 加速插件管理命令
+. /opt/uu/bin/uu-common.sh
+
+usage() {
+    cat <<USAGE
+用法: uuctl <命令>
+  status    查看运行状态
+  log       跟踪日志（Ctrl+C 退出）
+  start | stop | restart
+  update    立即检查并更新插件（有新版会重启插件）
+  enable | disable   开机自启开关
+USAGE
+}
+
+cmd_status() {
+    load_conf
+    detect_lan_if
+    local pid ver st
+    pid=$(head -n1 "$PID_FILE" 2>/dev/null | tr -cd '0-9')
+    [ -n "$pid" ] && [ "$(cat "/proc/$pid/comm" 2>/dev/null)" = uuplugin ] || pid=""
+    ver=$(sed -n 's/^version=//p' "${RUNNING_DIR}/${PLUGIN_CONF}" 2>/dev/null)
+    st=$(cat "${RUNNING_DIR}/uu_status" 2>/dev/null)
+    echo "服务:       $(systemctl is-active uu.service) / 开机自启 $(systemctl is-enabled uu.service 2>/dev/null)"
+    echo "DNS 服务:   $(systemctl is-active uu-dns.service)"
+    echo "插件进程:   ${pid:-未运行}"
+    echo "插件版本:   ${ver:-未知}"
+    echo "uu_status:  ${st:-无}  (0 = 正常)"
+    echo "设备型号:   $(factory_get productname)  SN: $(factory_get manucode)"
+    echo "LAN 网卡:   ${LAN_IF:-未找到} $(lan_addr)"
+    if [ "$IPV6" = "1" ] && [ "$GATEWAY" = "1" ]; then
+        echo "IPv6:       已开启（向局域网通告本机为 IPv6 路由器）$(ip -6 -o addr show dev "$LAN_IF" scope global 2>/dev/null | awk '{print $4; exit}')"
+    else
+        echo "IPv6:       未开启（设备 IPv6 走主路由）"
+    fi
+    echo
+    echo "局域网设备设置：网关 = $(lan_addr | cut -d/ -f1)    DNS = $(lan_addr | cut -d/ -f1)"
+}
+
+cmd_update() {
+    systemctl is-active -q uu.service || { echo "uu 服务未运行"; exit 1; }
+    # 插件自身发现新版时也是写这个标记并退出
+    touch "${RUNNING_DIR}/${UPDATE_FILE}"
+    pkill -x uuplugin
+    echo "已触发更新，查看进度: uuctl log"
+}
+
+[ "$(id -u)" = 0 ] || { [ "$1" = status ] || [ "$1" = log ] || { echo "请用 root 运行"; exit 1; }; }
+
+case "$1" in
+    status)  cmd_status ;;
+    log)     exec journalctl -u uu.service -u uu-dns.service -f -n 50 ;;
+    start|stop|restart) exec systemctl "$1" uu.service ;;
+    enable|disable)     exec systemctl "$1" uu.service ;;
+    update)  cmd_update ;;
+    *)       usage; exit 1 ;;
+esac

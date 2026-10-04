@@ -1,0 +1,25 @@
+#!/bin/sh
+# uuplugin 命令垫片（monitor 把 /opt/uu/shim 放在 PATH 最前面，只对 uuplugin 及其子进程生效）
+#
+# iptables / ip6tables / xtables-nft-multi：
+#   uuplugin 以 "XTABLES_LIBDIR=/lib iptables ..." 方式调用，这在 Debian/Ubuntu 等发行版上
+#   会让 iptables 找不到扩展模块（--dport、-m mac、-j MARK、-j DNAT 全部报错），
+#   这里清掉该变量后再执行系统真正的命令。
+# brctl：
+#   插件会执行 "brctl show | cut -f1 | grep br- | head -n1" 猜 LAN 网桥，宿主机上 docker
+#   的 br-xxxx 网桥可能被误选。LAN 口已通过 uu.conf 的 lan_ifname 指定，这里什么都不返回。
+
+name=${0##*/}
+
+if [ "$name" = "brctl" ]; then
+    exit 0
+fi
+
+unset XTABLES_LIBDIR
+for d in /usr/sbin /sbin /usr/bin /bin /usr/local/sbin /usr/local/bin; do
+    if [ -x "$d/$name" ]; then
+        exec "$d/$name" "$@"
+    fi
+done
+echo "$name: not found" >&2
+exit 127

@@ -1,0 +1,11 @@
+[Unit]
+Description=NetEase UU bypass gateway DNS / IPv6 RA (dnsmasq)
+PartOf=uu.service
+After=network-online.target uu.service
+
+[Service]
+Type=simple
+ExecCondition=/opt/uu/bin/uu-gateway.sh dns-enabled
+ExecStart=/opt/uu/bin/uu-gateway.sh dns
+Restart=always
+RestartSec=5
