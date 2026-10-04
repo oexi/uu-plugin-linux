@@ -8,7 +8,7 @@
 - 每次启动先向网易服务器检查插件版本，有新版自动下载、校验 md5 后再启动；
   运行中插件发现新版本时也会自动更新重启
 - 自动配置旁路网关：IP 转发、MASQUERADE、关闭 ICMP 重定向、放行 DNS，并内置 dnsmasq 提供 DNS
-- 可选 IPv6 旁路网关（`IPV6=1`）：通过路由通告把本机设为局域网的 IPv6 默认路由器，插件可加速 IPv6 流量
+- IPv6 防绕过：本机 DNS 不返回 IPv6 地址，避免被加速设备的游戏流量走 IPv6 绕过加速
 
 ## 1. 要求
 
@@ -37,7 +37,6 @@ sudo ./install.sh
 ```sh
 sudo ./install.sh --lan-if eth0                  # 指定局域网网卡（默认：默认路由所在网卡）
 sudo ./install.sh --factoryinfo ./factoryinfo    # 使用指定的 SN 文件（默认按本机 MAC 生成）
-sudo ./install.sh --ipv6                         # 同时开启 IPv6 旁路网关（见第 4 节）
 sudo ./install.sh --no-start                     # 只安装不启动
 ```
 
@@ -55,7 +54,7 @@ DNS 服务:   active
 uu_status:  0  (0 = 正常)
 设备型号:   NX30Pro  SN: 0a:fb:37:75:0a:d5
 LAN 网卡:   eth0 192.168.1.2/24
-IPv6:       未开启（设备 IPv6 走主路由）
+过滤 AAAA:  开启  (DNS 指向本机的设备只走 IPv4)
 
 局域网设备设置：网关 = 192.168.1.2    DNS = 192.168.1.2
 ```
@@ -78,26 +77,19 @@ IPv6:       未开启（设备 IPv6 走主路由）
 
 ## 4. IPv6
 
-新版插件带有 IPv6 处理逻辑（从二进制中的字符串看）：通过 `ip -6 neigh` 把设备 MAC 和 IPv6 地址对应起来，
-tun 里处理被加速设备的 IPv6 包和 IPv6 DNS 请求，并会调用 `ip6tables`。前提是设备的 IPv6 流量要经过本机。
+**插件只加速 IPv4。** 从插件二进制看（`unsupport pkt v6`、`ip6_rx_dropped`），加速隧道会丢弃 IPv6 包。
+它的“IPv6 支持”是防止加速失效：在主路由上通过 `ip -6 neigh` 找到被加速设备的 IPv6 地址，
+用 `ip6tables -m mac --mac-source <设备> --dport 53 -j DROP` 拦截设备的 IPv6 DNS，
+迫使设备改用已被插件劫持的 IPv4 DNS，游戏因此解析到 IPv4 地址，走进加速。
 
-旁路网关模式下，设备的 IPv6 默认路由来自主路由的路由通告（RA），默认直接走主路由，插件看不到。
-开启 `IPV6=1`（或安装时加 `--ipv6`）后：
+旁路网关模式下，设备的 IPv6 DNS 和 IPv6 流量直接走主路由，不经过本机，上面这条拦截规则不起作用。
+本包用等效的办法：本机 dnsmasq 开启 `--filter-AAAA`（`FILTER_AAAA=1`，默认），不返回 IPv6 地址。
 
-- 开启 IPv6 转发，`ip6tables` 放行 LAN 口转发和 DNS
-- dnsmasq 向局域网发送 RA：本机为**高优先级**默认路由器（每 30 秒通告，路由器生存期 180 秒），
-  并通告本机为 IPv6 DNS；前缀沿用主路由下发的前缀（只做 SLAAC，不跑 DHCPv6，不会产生新地址段）
-- 丢弃本机发出的 ICMPv6 重定向：Linux 从同一网卡转发时会通知客户端“直接找主路由”，导致绕过本机
-  （IPv6 没有像 IPv4 `send_redirects` 那样的开关）
-- 本机自己由内核处理 RA 的网卡改为 `accept_ra=2`，开启转发后本机仍能从主路由获取 IPv6 地址和路由
-  （systemd-networkd / NetworkManager 在用户态处理 RA，不受影响）
-
-**限制**：RA 是对整个局域网广播的，开启后局域网内所有接受 RA 的设备，其 IPv6 流量都会经过本机，
-没法像 IPv4 那样只让手动指定网关的设备走本机。设备不需要做任何 IPv6 设置。
-本机宕机时，设备通过邻居不可达检测几秒内会切回主路由；本机仍在线但 `uuctl stop` 后，
-设备最多 3 分钟内（路由器生存期）回落到主路由。
-
-不想让全网 IPv6 经过本机，就保持 `IPV6=0`（默认）。这时设备的 IPv6 仍走主路由，插件只加速 IPv4。
+- 只影响把 DNS 设为本机的设备（也就是你指定要加速的设备），其它设备的 IPv6 完全不受影响
+- 这些设备会失去 IPv6 解析，访问网站、游戏都走 IPv4，对游戏机一般没有影响
+- 设备若同时使用主路由经 IPv6 下发的 DNS（部分电脑、手机会这样），仍可能拿到 IPv6 地址；
+  这种设备可以在系统里关闭 IPv6，或在主路由上关闭 IPv6 DNS 下发
+- 本机不转发 IPv6，也不发送路由通告，不会改变局域网其它设备的 IPv6 路由
 
 ## 5. 管理
 
@@ -118,8 +110,8 @@ uuctl enable|disable   # 开机自启开关
 | `LAN_IF` | 空 | 局域网网卡，空 = 默认路由所在网卡 |
 | `GATEWAY` | 1 | 开启旁路网关转发 |
 | `MASQUERADE` | 1 | 转发流量做 NAT（旁路网关标准做法，避免回程绕过本机） |
-| `IPV6` | 0 | IPv6 旁路网关，见第 4 节 |
 | `DNS` | 1 | 在 `LAN_IF` 的 53 端口运行 dnsmasq；本机已有 DNS 服务（AdGuard Home 等）时设为 0 |
+| `FILTER_AAAA` | 1 | 本机 DNS 不返回 IPv6 地址，见第 4 节（需要 dnsmasq 2.87+） |
 | `DNS_UPSTREAM` | 空 | 上游 DNS（空格分隔），空 = 系统当前上游 |
 | `UPDATE_ON_START` | 1 | 启动时检查并更新插件 |
 | `UPDATE_WAIT` | 120 | 启动时等待更新服务器的最长秒数，超时先用本地缓存版本启动 |
@@ -190,10 +182,10 @@ sudo ./uninstall.sh --purge    # 连配置和 SN 文件一起删除
    - LAN 网段访问外网做 MASQUERADE
    - `INPUT` 放行 LAN 口 53 端口
    - monitor 每分钟检查一次，规则被防火墙重载冲掉或 LAN 地址变化时自动补回；服务停止时全部撤销
-   - `IPV6=1` 时另有 IPv6 转发、RA 和 ICMPv6 重定向拦截，见第 4 节
+   - 只接管 IPv4，不转发 IPv6；`ip6tables` 只放行 LAN 口访问本机 DNS
 7. **DNS / RA**：`uu-dns.service` 运行独立的 dnsmasq 实例（`--conf-file=/dev/null`，不读系统 dnsmasq 配置），
    只监听 LAN 网卡地址（IPv4 和 IPv6），不提供 DHCP，可与 systemd-resolved（127.0.0.53）共存；
-   `IPV6=1` 时它同时负责发送 IPv6 路由通告。
+   默认开启 `--filter-AAAA`，见第 4 节。
 
 ## 8. 常见问题
 
@@ -205,8 +197,8 @@ sudo ./uninstall.sh --purge    # 连配置和 SN 文件一起删除
 | 客户端设了网关后上不了网 | `iptables -L UU_GW_FWD -v -n` 看计数；确认客户端网关/DNS 填的是 `uuctl status` 显示的地址 |
 | App 搜不到设备 | 手机和本机在同一局域网；手机也把网关设为本机后再试 |
 | 本机 IP 改了 | 无需操作，monitor 1 分钟内自动更新规则；记得同步修改客户端网关/DNS |
-| 设备 IPv6 没走本机 | 确认 `IPV6=1`；设备上看 IPv6 默认网关应为本机的 `fe80::` 地址；个别设备不认 RA 优先级时，可在主路由上关闭 IPv6 RA 或给设备关闭 IPv6 |
-| 开启 IPv6 后本机自己的 IPv6 断了 | 本机网卡由其它工具管理 RA 且关闭了接收：检查 `sysctl net.ipv6.conf.<网卡>.accept_ra`，内核处理时应为 2 |
+| 加速设备仍解析到 IPv6 地址 | 设备同时用了主路由下发的 IPv6 DNS：在设备上关闭 IPv6，或在主路由关闭 IPv6 DNS 下发 |
+| 日志提示 dnsmasq 不支持 FILTER_AAAA | 系统 dnsmasq 低于 2.87（如 Debian 11），升级系统，或给游戏设备关闭 IPv6 |
 
 ## 9. 测试情况
 
@@ -220,8 +212,6 @@ sudo ./uninstall.sh --purge    # 连配置和 SN 文件一起删除
 - 插件连上网易服务器（`106.2.95.34:16000`），`uu_status=0`；iptables 自检规则可正常添加/删除
 - 局域网客户端网关/DNS 指向本机后正常上网（含 FORWARD 默认 DROP 的情况）、DNS 解析正常
 - 防火墙规则被删除后 1 分钟内自动恢复；停止服务后插件和网关规则全部清理
-- IPv6（双栈网络）：客户端从 RA 学到本机为 `pref high` 默认路由器，IPv6 上网和 IPv6 DNS 正常，流量经本机转发；
-  模拟主路由为链路本地下一跳时，不拦截则本机发出 ICMPv6 重定向使客户端绕过本机，拦截后不再绕过；
-  本机下线时客户端几秒内切回主路由；`IPV6` 开关切换、停止清理、重启后自动恢复
+- 双栈网络：DNS 指向本机时 AAAA 查询返回空、A 查询正常；本机不转发 IPv6、不发送路由通告；从旧版 RA 方式升级后残留的 IPv6 转发规则被自动清理
 
 **未验证**：手机 App 绑定和实际游戏加速（需要真实局域网、UU 账号和游戏设备），请部署后实测。

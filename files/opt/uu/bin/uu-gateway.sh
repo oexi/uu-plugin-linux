@@ -4,8 +4,8 @@
 #   uu-gateway.sh up           开启转发、NAT、放行 DNS
 #   uu-gateway.sh down         撤销 up 添加的规则
 #   uu-gateway.sh ensure       规则被防火墙重载冲掉 / LAN 地址变化时自动补回（monitor 每分钟调用）
-#   uu-gateway.sh dns          前台运行 dnsmasq：DNS 和 IPv6 路由通告（uu-dns.service 调用）
-#   uu-gateway.sh dns-enabled  需要运行 dnsmasq（DNS=1 或 IPV6=1）时返回 0
+#   uu-gateway.sh dns          前台运行 dnsmasq（uu-dns.service 调用）
+#   uu-gateway.sh dns-enabled  DNS=1 时返回 0
 
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 . /opt/uu/bin/uu-common.sh
@@ -40,19 +40,6 @@ sysctl_up() {
     rp_loose "$LAN_IF"
 }
 
-# 开启 IPv6 转发后，内核默认不再处理 RA（accept_ra=1 时），本机会丢掉自己的 SLAAC 地址和
-# IPv6 默认路由。把由内核处理 RA 的网卡改为 accept_ra=2（转发时仍接收 RA）。
-# accept_ra=0 的网卡（systemd-networkd / NetworkManager 在用户态处理 RA）不受影响，保持不动。
-sysctl6_up() {
-    local d n
-    for d in /proc/sys/net/ipv6/conf/*; do
-        n=${d##*/}
-        [ "$n" = all ] || [ "$n" = lo ] && continue
-        [ "$(cat "$d/accept_ra" 2>/dev/null)" = "1" ] && echo 2 > "$d/accept_ra"
-    done
-    sysctl_set net/ipv6/conf/all/forwarding 1
-}
-
 # ---------- iptables ----------
 
 # 以下函数第一个参数为 "$IPT" 或 "$IP6T"
@@ -71,7 +58,7 @@ jump_del() {
     $1 -t "$2" -X "$4" 2>/dev/null
 }
 
-# 放行 LAN 口访问本机 DNS
+# 放行 LAN 口访问本机 DNS（IPv4 和 IPv6）
 rules_in() {
     chain_reset "$1" filter UU_GW_IN
     if [ "$DNS" = "1" ]; then
@@ -105,19 +92,12 @@ rules_up() {
         jump_del "$IPT" nat POSTROUTING UU_GW_NAT
     fi
 
+    # 只接管 IPv4：IPv6 不转发，只放行本机 DNS
     command -v ip6tables >/dev/null 2>&1 || return 0
     rules_in "$IP6T"
-    if [ "$GATEWAY" = "1" ] && [ "$IPV6" = "1" ]; then
-        rules_fwd "$IP6T"
-        # IPv6 没有关闭 ICMP 重定向的 sysctl：本机从同一网卡转发时会发重定向，
-        # 让客户端改为直接找主路由，绕过本机。在出口丢弃。
-        chain_reset "$IP6T" filter UU_GW_OUT
-        $IP6T -A UU_GW_OUT -o "$LAN_IF" -p icmpv6 --icmpv6-type redirect -j DROP
-        jump_add "$IP6T" filter OUTPUT UU_GW_OUT
-    else
-        jump_del "$IP6T" filter FORWARD UU_GW_FWD
-        jump_del "$IP6T" filter OUTPUT UU_GW_OUT
-    fi
+    # 清理旧版本（RA 方式 IPv6 网关）留下的规则
+    jump_del "$IP6T" filter FORWARD UU_GW_FWD
+    jump_del "$IP6T" filter OUTPUT UU_GW_OUT
 }
 
 rules_down() {
@@ -138,17 +118,13 @@ rules_present() {
     fi
     command -v ip6tables >/dev/null 2>&1 || return 0
     $IP6T -C INPUT -j UU_GW_IN 2>/dev/null || return 1
-    if [ "$GATEWAY" = "1" ] && [ "$IPV6" = "1" ]; then
-        $IP6T -C FORWARD -j UU_GW_FWD 2>/dev/null || return 1
-        $IP6T -C OUTPUT -j UU_GW_OUT 2>/dev/null || return 1
-    fi
     return 0
 }
 
 # ---------- 命令 ----------
 
 signature() {
-    echo "${LAN_IF} $(lan_cidr) gw=${GATEWAY} masq=${MASQUERADE} dns=${DNS} ipv6=${IPV6}"
+    echo "${LAN_IF} $(lan_cidr) gw=${GATEWAY} masq=${MASQUERADE} dns=${DNS}"
 }
 
 wait_lan_addr() {
@@ -162,14 +138,11 @@ wait_lan_addr() {
 
 cmd_up() {
     wait_lan_addr
-    if [ "$GATEWAY" = "1" ]; then
-        sysctl_up
-        [ "$IPV6" = "1" ] && sysctl6_up
-    fi
+    [ "$GATEWAY" = "1" ] && sysctl_up
     rules_up "$(lan_cidr)"
     mkdir -p "$UU_RUN_DIR"
     signature > "$STATE_FILE"
-    log "网关环境就绪：LAN ${LAN_IF} $(lan_addr)，转发=${GATEWAY} NAT=${MASQUERADE} DNS=${DNS} IPv6=${IPV6}"
+    log "网关环境就绪：LAN ${LAN_IF} $(lan_addr)，转发=${GATEWAY} NAT=${MASQUERADE} DNS=${DNS}"
 }
 
 cmd_down() {
@@ -186,7 +159,7 @@ cmd_ensure() {
 }
 
 cmd_dns() {
-    local user group up port
+    local user group up
     command -v dnsmasq >/dev/null 2>&1 || { log "ERROR: 未安装 dnsmasq"; exit 1; }
 
     if id dnsmasq >/dev/null 2>&1; then user=dnsmasq; else user=nobody; fi
@@ -194,17 +167,21 @@ cmd_dns() {
     elif getent group nogroup >/dev/null 2>&1; then group=nogroup
     else group=nobody; fi
 
-    if [ "$DNS" = "1" ]; then port=53; else port=0; fi
     set -- --keep-in-foreground --conf-file=/dev/null --pid-file= \
-        --interface="$LAN_IF" --except-interface=lo --bind-dynamic --port="$port" \
+        --interface="$LAN_IF" --except-interface=lo --bind-dynamic --port=53 \
         --cache-size=2048 --user="$user" --group="$group" --log-facility=-
 
-    if [ "$GATEWAY" = "1" ] && [ "$IPV6" = "1" ]; then
-        # IPv6 路由通告：把本机通告为高优先级 IPv6 默认路由器（并通告本机为 IPv6 DNS）。
-        # 前缀沿用 LAN 口上主路由下发的前缀（constructor），不另起地址段，只做 SLAAC，不跑 DHCPv6。
-        # 每 30 秒通告一次，路由器生存期 180 秒：本机停机后客户端最多 3 分钟回落到主路由。
-        set -- "$@" --enable-ra --dhcp-range="::,constructor:${LAN_IF},ra-only" \
-            --ra-param="${LAN_IF},high,30,180" --quiet-ra
+    # 插件只加速 IPv4（隧道丢弃 IPv6 包）。设备从主路由拿到 IPv6 时，游戏解析到 AAAA
+    # 就可能直接走 IPv6 出主路由、绕过加速。官方插件在主路由上靠拦截设备的 IPv6 DNS 解决，
+    # 旁路网关看不到那部分流量，改为在本机 DNS 不返回 AAAA：只影响把 DNS 指向本机的设备。
+    local filter=0
+    if [ "$FILTER_AAAA" = "1" ]; then
+        if dnsmasq --help 2>/dev/null | grep -q -- '--filter-AAAA'; then
+            set -- "$@" --filter-AAAA
+            filter=1
+        else
+            log "WARN: dnsmasq 版本过旧（需要 2.87+），不支持 FILTER_AAAA，已忽略"
+        fi
     fi
 
     if [ -n "$DNS_UPSTREAM" ]; then
@@ -219,14 +196,14 @@ cmd_dns() {
         set -- "$@" --resolv-file=/etc/resolv.conf
     fi
 
-    log "启动 dnsmasq：${LAN_IF} DNS=${DNS} IPv6路由通告=$([ "$GATEWAY$IPV6" = 11 ] && echo 1 || echo 0)"
+    log "启动 dnsmasq，监听 ${LAN_IF} 的 53 端口，过滤 AAAA=${filter}"
     exec dnsmasq "$@"
 }
 
 load_conf
 case "$1" in
     dns-enabled)
-        [ "$DNS" = "1" ] || { [ "$GATEWAY" = "1" ] && [ "$IPV6" = "1" ]; }
+        [ "$DNS" = "1" ]
         exit
         ;;
 esac

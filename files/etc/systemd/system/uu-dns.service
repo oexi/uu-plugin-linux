@@ -1,5 +1,5 @@
 [Unit]
-Description=NetEase UU bypass gateway DNS / IPv6 RA (dnsmasq)
+Description=NetEase UU bypass gateway DNS (dnsmasq)
 PartOf=uu.service
 After=network-online.target uu.service
 

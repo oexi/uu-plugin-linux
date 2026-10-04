@@ -4,7 +4,6 @@
 #   sudo ./install.sh                         # 安装并启动，开机自启
 #   sudo ./install.sh --factoryinfo FILE      # 使用已有的 SN 文件（默认按本机 LAN 网卡 MAC 生成）
 #   sudo ./install.sh --lan-if eth0           # 指定局域网网卡（默认取默认路由所在网卡）
-#   sudo ./install.sh --ipv6                  # 同时作为 IPv6 旁路网关（见 /etc/uu/uu.conf 的 IPV6 说明）
 #   sudo ./install.sh --no-start              # 只安装不启动
 
 set -e
@@ -13,15 +12,13 @@ SRC=$(pwd)
 
 FACTORYINFO=""
 LAN_IF_ARG=""
-IPV6_ARG=""
 NO_START=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --factoryinfo) FACTORYINFO=$2; shift 2 ;;
         --lan-if)      LAN_IF_ARG=$2; shift 2 ;;
-        --ipv6)        IPV6_ARG=1; shift ;;
         --no-start)    NO_START=1; shift ;;
-        -h|--help)     sed -n '2,10p' "$0"; exit 0 ;;
+        -h|--help)     sed -n '2,9p' "$0"; exit 0 ;;
         *) echo "未知参数: $1" >&2; exit 2 ;;
     esac
 done
@@ -108,14 +105,6 @@ if [ -n "$LAN_IF_ARG" ]; then
     sed -i "s/^LAN_IF=.*/LAN_IF=\"$LAN_IF_ARG\"/" /etc/uu/uu.conf
 fi
 
-if [ -n "$IPV6_ARG" ]; then
-    if grep -q '^IPV6=' /etc/uu/uu.conf; then
-        sed -i 's/^IPV6=.*/IPV6=1/' /etc/uu/uu.conf
-    else
-        echo 'IPV6=1' >> /etc/uu/uu.conf
-    fi
-fi
-
 . /opt/uu/bin/uu-common.sh
 load_conf
 detect_lan_if || die "找不到局域网网卡，请用 --lan-if 指定"
@@ -161,13 +150,6 @@ if [ "$NO_START" = 0 ]; then
 fi
 
 ip4=$(lan_addr | cut -d/ -f1)
-if [ "$IPV6" = "1" ]; then
-    v6note="
-IPv6：已开启。本机会向局域网通告自己为 IPv6 默认路由器和 DNS，设备的 IPv6 无需手动设置。"
-else
-    v6note="
-IPv6：未开启（设备的 IPv6 仍走主路由）。如需加速 IPv6 流量，在 /etc/uu/uu.conf 设 IPV6=1 后 uuctl restart。"
-fi
 cat <<EOF
 
 安装完成。
@@ -179,5 +161,5 @@ cat <<EOF
   网关:    ${ip4}
   DNS:     ${ip4}
 然后在手机 UU 主机加速 App 中添加路由器/绑定设备即可加速。
-${v6note}
+（插件只加速 IPv4；DNS 指向本机的设备不会解析到 IPv6 地址，避免游戏绕过加速）
 EOF

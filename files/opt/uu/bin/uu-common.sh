@@ -27,7 +27,7 @@ load_conf() {
     MASQUERADE=1
     DNS=1
     DNS_UPSTREAM=""
-    IPV6=0
+    FILTER_AAAA=1
     UPDATE_ON_START=1
     UPDATE_WAIT=120
     # shellcheck disable=SC1090

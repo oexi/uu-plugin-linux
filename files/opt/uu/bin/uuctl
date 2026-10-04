@@ -28,11 +28,7 @@ cmd_status() {
     echo "uu_status:  ${st:-无}  (0 = 正常)"
     echo "设备型号:   $(factory_get productname)  SN: $(factory_get manucode)"
     echo "LAN 网卡:   ${LAN_IF:-未找到} $(lan_addr)"
-    if [ "$IPV6" = "1" ] && [ "$GATEWAY" = "1" ]; then
-        echo "IPv6:       已开启（向局域网通告本机为 IPv6 路由器）$(ip -6 -o addr show dev "$LAN_IF" scope global 2>/dev/null | awk '{print $4; exit}')"
-    else
-        echo "IPv6:       未开启（设备 IPv6 走主路由）"
-    fi
+    echo "过滤 AAAA:  $([ "$FILTER_AAAA" = 1 ] && echo 开启 || echo 关闭)  (DNS 指向本机的设备只走 IPv4)"
     echo
     echo "局域网设备设置：网关 = $(lan_addr | cut -d/ -f1)    DNS = $(lan_addr | cut -d/ -f1)"
 }
