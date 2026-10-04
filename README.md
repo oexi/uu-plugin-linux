@@ -17,6 +17,7 @@
 |---|---|
 | 架构 | **aarch64 (arm64)**：使用 H3C NX30Pro 版插件<br>**armv7（32 位 ARM）**：使用 H3C BX54 版插件（需 ARMv7 及以上 CPU，树莓派 1/Zero 等 ARMv6 不支持）<br>x86_64、MIPS 等不支持 |
 | 系统 | systemd 发行版（Debian/Ubuntu/Armbian 等，已在 Ubuntu 24.04 arm64 / armhf 上测试） |
+| 内核页大小 | 4K / 16K / 64K 均可（插件和运行时库的 ELF 段都按 64K 对齐）。树莓派 5（BCM2712）的 Raspberry Pi OS 默认是 16K 页内核，可直接使用 |
 | 内核 | 支持 TUN、netfilter（发行版内核默认都有） |
 | 网络 | 本机与主路由、局域网设备在同一网段，**建议本机使用固定 IP** |
 
@@ -252,6 +253,7 @@ sudo ./uninstall.sh --purge    # 连配置和 SN 文件一起删除
 - armv7（H3C BX54 版，32 位 ARM 用户态）：安装、登录网易服务器、局域网客户端经本机上网和 DNS、
   插件异常退出后自动拉起（旧 guardian 进程被清理）、重启自启、卸载
 - 从旧版本目录结构（`/opt/uu/musl/lib`）升级到按架构分目录
+- 非 4K 页内核：Ubuntu 64K 页 arm64 内核（QEMU 虚拟机）下插件和 guardian 正常运行，并登录网易服务器
 - 双栈网络：DNS 指向本机时 AAAA 查询返回空、A 查询正常；本机不转发 IPv6、不发送路由通告；从旧版 RA 方式升级后残留的 IPv6 转发规则被自动清理
 
 **未验证**：手机 App 绑定和实际游戏加速（需要真实局域网、UU 账号和游戏设备），请部署后实测。
