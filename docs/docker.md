@@ -33,6 +33,8 @@ and a disk mounted as `usb1` (RouterOS 7.20+ syntax; on older versions use `name
 /container start [find interface=veth-uu]
 ```
 
+- The veth must be a port of the **LAN bridge**, not of a separate container bridge (e.g. `docker0` with its own subnet):
+  devices can only use a gateway on their own subnet, so a container on another subnet logs in fine but clients get no internet
 - Do **not** set `cmd` or `entrypoint`: RouterOS then runs the command directly and skips the image's entrypoint
 - `logging=yes` sends the log to `/log`; inside the container, `uuctl status` and `uuctl log` work as on the native install
   (`/container shell [find interface=veth-uu]`)
