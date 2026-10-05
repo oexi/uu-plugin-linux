@@ -44,6 +44,9 @@ On each device to accelerate (Switch / PS5 / Xbox / PC …):
 
 Then add the router / bind the device in the UU app. `uuctl status` shows the address to use.
 
+**Linux PCs** are detected as Android phones (fewer games). Set `net.ipv4.ip_default_ttl = 128` on the PC and use a static IP
+to have it detected as Windows, see [Device type detection](docs/device-type.md).
+
 ## Manage
 
 ```sh
@@ -56,6 +59,7 @@ sudo ./uninstall.sh            # keeps /etc/uu; add --purge to remove it
 - [Docker image](docs/docker.md): running in a container, environment variables
 - [Configuration](docs/configuration.md): `/etc/uu/uu.conf` options and the SN file
 - [IPv6](docs/ipv6.md): how IPv6 is handled
+- [Device type detection](docs/device-type.md): making a Linux PC show up as Windows
 - [Why the H3C build](docs/why-h3c.md): why the generic OpenWrt build cannot accelerate PCs
 - [Implementation notes](docs/implementation.md): file layout and porting details
 - [Troubleshooting](docs/troubleshooting.md)
