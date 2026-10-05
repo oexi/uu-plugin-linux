@@ -145,7 +145,7 @@ install_backtar() {
         log "ERROR: 插件是 ${arch} 架构，本机没有对应的 musl 运行时（/lib/$(arch_ldso "$arch")）。" \
             "请检查 ${UU_FACTORYINFO} 的 productname 是否与本机架构匹配，或重新运行 install.sh"
     fi
-    log "已安装插件 $(plugin_version)（${arch}）"
+    log "已安装插件 $(plugin_version)（${arch}$([ -n "$(plugin_qemu "$arch")" ] && echo "，qemu 模拟运行")）"
     return 0
 }
 
@@ -180,7 +180,10 @@ start_acc() {
     fi
     ensure_lan_ifname
     rm -f "$PID_FILE"
-    (cd "$RUNNING_DIR" && exec "./${PLUGIN_EXE}" "${RUNNING_DIR}/${PLUGIN_CONF}" >/dev/null 2>&1) &
+    local qemu
+    qemu=$(plugin_qemu "$(elf_arch "${RUNNING_DIR}/${PLUGIN_EXE}")")
+    # shellcheck disable=SC2086
+    (cd "$RUNNING_DIR" && exec $qemu "./${PLUGIN_EXE}" "${RUNNING_DIR}/${PLUGIN_CONF}" >/dev/null 2>&1) &
     PLUGIN_PID=$!
     log "uuplugin $(plugin_version) 已启动 (pid ${PLUGIN_PID})"
 }

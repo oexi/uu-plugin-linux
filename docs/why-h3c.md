@@ -13,4 +13,5 @@ Comparing the H3C and generic binaries of the same version (v14.9.4): device cla
 At login (the Connect message) the plugin reports `sn`, `model`, `type`, `plugin_type`, `real_sn` and `firmware_type`,
 and the server decides per channel which devices may be accelerated; the H3C channel allows PCs. So PC acceleration depends on
 which channel's plugin is used, not on the CPU architecture. H3C only ships aarch64 (NX30Pro), armv7 (BX54/BX30) and
-MIPS (NX15, uClibc) plugins and no x86_64 one, which is why this package supports arm64 and armv7 only.
+MIPS (NX15, uClibc) plugins and no x86_64 one, which is why this package supports arm64 and armv7 natively;
+the amd64 Docker image runs the aarch64 H3C plugin under QEMU instead of using `openwrt-x86_64` (see [x86_64](x86_64.md)).

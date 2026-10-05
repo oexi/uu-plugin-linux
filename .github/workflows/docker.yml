@@ -17,8 +17,9 @@ permissions:
 
 jobs:
   build:
-    # The image build only installs Alpine packages and copies files, so arm/v7 under QEMU is quick
-    runs-on: ubuntu-24.04-arm
+    # x86_64 runner: the amd64 image compiles qemu-aarch64 natively (cached); the arm images
+    # only install Alpine packages and copy files, so building them under QEMU is quick
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -36,7 +37,7 @@ jobs:
       - name: Setup QEMU
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm
+          platforms: arm64,arm
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -54,9 +55,34 @@ jobs:
         with:
           context: .
           file: docker/Dockerfile
-          platforms: linux/arm64,linux/arm/v7
+          platforms: linux/arm64,linux/arm/v7,linux/amd64
           labels: ${{ steps.meta.outputs.labels }}
           tags: ${{ steps.meta.outputs.tags }}
           push: ${{ env.PUSH }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  test-amd64:
+    # Runs the amd64 image on a runner without binfmt_misc for aarch64, so the plugin and the guardian it
+    # starts can only run through the image's own qemu-aarch64
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image (from cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          tags: uu:test
+          load: true
+          cache-from: type=gha
+
+      - name: Run and wait for the plugin to log in
+        run: sh docker/test-amd64.sh uu:test

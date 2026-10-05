@@ -10,7 +10,8 @@ The box becomes a **UU bypass gateway**: point a device's gateway and DNS at it,
 
 ## Requirements
 
-- **arm64** (H3C NX30Pro plugin) or **armv7** (H3C BX54 plugin); x86_64, MIPS and ARMv6 are not supported.
+- **arm64** (H3C NX30Pro plugin) or **armv7** (H3C BX54 plugin); MIPS and ARMv6 are not supported.
+  **x86_64** only through the [Docker image](docs/docker.md), which emulates the arm64 plugin
   4K/16K/64K page kernels all work, including Raspberry Pi 5 (BCM2712)
 - A systemd-based distribution
 - Same subnet as the main router and the LAN devices; a static IP is recommended
@@ -30,7 +31,8 @@ Options: `--lan-if eth0` (LAN interface), `--factoryinfo FILE` (reuse an existin
 
 ### Docker
 
-Alternatively, run the multi-arch image `ghcr.io/oexi/uu-plugin-linux-arm64` (arm64, armv7), see [Docker image](docs/docker.md).
+Alternatively, run the multi-arch image `ghcr.io/oexi/uu-plugin-linux-arm64` (arm64, armv7, amd64), see [Docker image](docs/docker.md).
+On x86_64 (e.g. RouterOS x86 / CHR) this is the only option: the image runs the arm64 H3C plugin under QEMU, see [x86_64](docs/x86_64.md).
 
 ## Set up LAN devices
 
@@ -57,6 +59,7 @@ sudo ./uninstall.sh            # keeps /etc/uu; add --purge to remove it
 ## Docs
 
 - [Docker image](docs/docker.md): running in a container, environment variables
+- [x86_64](docs/x86_64.md): how the amd64 image emulates the arm64 plugin
 - [Configuration](docs/configuration.md): `/etc/uu/uu.conf` options and the SN file
 - [IPv6](docs/ipv6.md): how IPv6 is handled
 - [Device type detection](docs/device-type.md): making a Linux PC show up as Windows

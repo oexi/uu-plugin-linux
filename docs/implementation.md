@@ -9,6 +9,7 @@
 | `/opt/uu/bin/uuctl` | Management command (`/usr/local/bin/uuctl`) |
 | `/opt/uu/shim/` | Command shims used only by uuplugin (see below) |
 | `/opt/uu/musl/<arch>/` | musl runtime; `/lib/ld-musl-aarch64.so.1` or `/lib/ld-musl-arm.so.1` points here |
+| `/opt/uu/qemu/qemu-aarch64` | amd64 Docker image only: patched QEMU that runs the aarch64 plugin ([x86_64](x86_64.md)) |
 | `/etc/uu/` | Configuration and SN file |
 | `/var/lib/uu/uu.tar.gz` | Plugin package cache (persistent, so the plugin also starts when booting offline) |
 | `/var/tmp/uu/` | Plugin working directory (path hard-coded in the plugin) |

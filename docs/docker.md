@@ -1,8 +1,8 @@
 # Docker image (RouterOS container)
 
 `ghcr.io/oexi/uu-plugin-linux-arm64:latest` runs the same bypass gateway in a container, for platforms without systemd
-such as RouterOS `/container`. It is a multi-arch image: `linux/arm64` (H3C NX30Pro plugin) and `linux/arm/v7` (H3C BX54 plugin);
-the plugin is chosen by the image architecture, not the kernel.
+such as RouterOS `/container`. It is a multi-arch image: `linux/arm64` (H3C NX30Pro plugin), `linux/arm/v7` (H3C BX54 plugin) and `linux/amd64`
+(H3C NX30Pro plugin emulated by QEMU, see [x86_64](x86_64.md)); the plugin is chosen by the image architecture, not the kernel.
 
 The container needs its **own IP on the LAN subnet**; LAN devices use that IP as gateway and DNS, exactly as with the native install.
 
@@ -77,4 +77,5 @@ An SN file from another device can be copied to `/etc/uu/factoryinfo` before the
 - No systemd: `uu-docker.sh` (run by `tini`) sets up the gateway, runs dnsmasq and `uu-monitor.sh`, and removes the rules on `SIGTERM`
 - `uuctl start|stop|enable|disable` are not available; start and stop the container instead. `uuctl restart` / `update` restart the plugin within a minute
 - The plugin package cache lives in `/etc/uu/cache` instead of `/var/lib/uu`
-- On arm64 the runtime comes from Alpine's own musl/libstdc++; on armv7 the bundled soft-float runtime (`runtime/arm`) is used next to Alpine's hard-float musl
+- On arm64 the runtime comes from Alpine's own musl/libstdc++; on armv7 the bundled soft-float runtime (`runtime/arm`) is used next to Alpine's hard-float musl;
+  on amd64 the bundled aarch64 runtime (`runtime/aarch64`) is run by `/opt/uu/qemu/qemu-aarch64`

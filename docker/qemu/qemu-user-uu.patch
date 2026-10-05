@@ -1,0 +1,263 @@
+diff --git a/linux-user/main.c b/linux-user/main.c
+index 60a695b..f64a404 100644
+--- a/linux-user/main.c
++++ b/linux-user/main.c
+@@ -26,6 +26,7 @@
+ #include <sys/resource.h>
+ #include <sys/shm.h>
+ #include <linux/binfmts.h>
++#include <sys/prctl.h>
+ 
+ #include "qapi/error.h"
+ #include "qemu.h"
+@@ -951,6 +952,12 @@ int main(int argc, char **argv, char **envp)
+         exit(EXIT_FAILURE);
+     }
+ 
++    /*
++     * uu-plugin: show the guest program's name instead of "qemu-aarch64"
++     * in /proc/PID/comm, as binfmt_misc would.
++     */
++    prctl(PR_SET_NAME, g_path_get_basename(real_exec_path));
++
+     for (wrk = target_environ; *wrk; wrk++) {
+         g_free(*wrk);
+     }
+diff --git a/linux-user/syscall.c b/linux-user/syscall.c
+index 9f45450..2c60c7a 100644
+--- a/linux-user/syscall.c
++++ b/linux-user/syscall.c
+@@ -142,6 +142,7 @@
+ #include "user/signal.h"
+ #include "qemu/guest-random.h"
+ #include "user/selfmap.h"
++#include "target_elf.h"
+ #include "special-errno.h"
+ #include "qapi/error.h"
+ #include "fd-trans.h"
+@@ -2112,6 +2113,58 @@ static inline abi_long host_to_target_cmsg(struct target_msghdr *target_msgh,
+     return 0;
+ }
+ 
++/*
++ * uu-plugin: the guest (aarch64) and the host (x86_64/aarch64) are both
++ * little-endian LP64 Linux with the asm-generic socket option numbers, so
++ * options QEMU does not know (SO_MARK, SO_ORIGINAL_DST, IP_MTU, TCP_INFO ...)
++ * can be passed to the host unchanged instead of failing.
++ */
++static abi_long passthrough_setsockopt(int sockfd, int level, int optname,
++                                       abi_ulong optval_addr, socklen_t optlen)
++{
++    void *p = NULL;
++    abi_long ret;
++
++    if (optlen > 0) {
++        p = lock_user(VERIFY_READ, optval_addr, optlen, 1);
++        if (!p) {
++            return -TARGET_EFAULT;
++        }
++    }
++    ret = get_errno(setsockopt(sockfd, level, optname, p, optlen));
++    unlock_user(p, optval_addr, 0);
++    return ret;
++}
++
++static abi_long passthrough_getsockopt(int sockfd, int level, int optname,
++                                       abi_ulong optval_addr, abi_ulong optlen)
++{
++    void *p = NULL;
++    socklen_t lv;
++    int len;
++    abi_long ret;
++
++    if (get_user_u32(len, optlen)) {
++        return -TARGET_EFAULT;
++    }
++    if (len < 0) {
++        return -TARGET_EINVAL;
++    }
++    if (len > 0) {
++        p = lock_user(VERIFY_WRITE, optval_addr, len, 0);
++        if (!p) {
++            return -TARGET_EFAULT;
++        }
++    }
++    lv = len;
++    ret = get_errno(getsockopt(sockfd, level, optname, p, &lv));
++    unlock_user(p, optval_addr, ret < 0 ? 0 : MIN(lv, (socklen_t)len));
++    if (ret >= 0 && put_user_u32(lv, optlen)) {
++        return -TARGET_EFAULT;
++    }
++    return ret;
++}
++
+ /* do_setsockopt() Must return target values and target errnos. */
+ static abi_long do_setsockopt(int sockfd, int level, int optname,
+                               abi_ulong optval_addr, socklen_t optlen)
+@@ -2123,8 +2176,10 @@ static abi_long do_setsockopt(int sockfd, int level, int optname,
+     case SOL_TCP:
+     case SOL_UDP:
+         /* TCP and UDP options all take an 'int' value.  */
+-        if (optlen < sizeof(uint32_t))
+-            return -TARGET_EINVAL;
++        if (optlen != sizeof(uint32_t)) {
++            return passthrough_setsockopt(sockfd, level, optname,
++                                          optval_addr, optlen);
++        }
+ 
+         if (get_user_u32(val, optval_addr))
+             return -TARGET_EFAULT;
+@@ -2608,9 +2663,10 @@ static abi_long do_setsockopt(int sockfd, int level, int optname,
+ #endif /* SOL_NETLINK */
+     default:
+     unimplemented:
+-        qemu_log_mask(LOG_UNIMP, "Unsupported setsockopt level=%d optname=%d\n",
++        qemu_log_mask(LOG_UNIMP, "Passthrough setsockopt level=%d optname=%d\n",
+                       level, optname);
+-        ret = -TARGET_ENOPROTOOPT;
++        ret = passthrough_setsockopt(sockfd, level, optname,
++                                     optval_addr, optlen);
+     }
+     return ret;
+ }
+@@ -2913,8 +2969,7 @@ write_ret:
+             }
+             break;
+         default:
+-            ret = -TARGET_ENOPROTOOPT;
+-            break;
++            goto unimplemented;
+         }
+         break;
+     case SOL_IPV6:
+@@ -2962,8 +3017,7 @@ write_ret:
+             goto write_ret;
+             break;
+         default:
+-            ret = -TARGET_ENOPROTOOPT;
+-            break;
++            goto unimplemented;
+         }
+         break;
+ #ifdef SOL_NETLINK
+@@ -3044,9 +3098,10 @@ write_ret:
+     default:
+     unimplemented:
+         qemu_log_mask(LOG_UNIMP,
+-                      "getsockopt level=%d optname=%d not yet supported\n",
++                      "Passthrough getsockopt level=%d optname=%d\n",
+                       level, optname);
+-        ret = -TARGET_EOPNOTSUPP;
++        ret = passthrough_getsockopt(sockfd, level, optname,
++                                     optval_addr, optlen);
+         break;
+     }
+     return ret;
+@@ -3240,14 +3295,11 @@ static abi_long do_socket(int domain, int type, int protocol)
+         return ret;
+     }
+ 
+-    if (domain == PF_NETLINK && !(
+-#ifdef CONFIG_RTNETLINK
+-         protocol == NETLINK_ROUTE ||
+-#endif
+-         protocol == NETLINK_KOBJECT_UEVENT ||
+-         protocol == NETLINK_AUDIT)) {
+-        return -TARGET_EPROTONOSUPPORT;
+-    }
++    /*
++     * uu-plugin: netlink protocols QEMU cannot translate (NETLINK_NETFILTER
++     * for conntrack ...) are used untranslated; same ABI, see
++     * passthrough_setsockopt().
++     */
+ 
+     if (domain == AF_PACKET ||
+         (domain == AF_INET && type == SOCK_PACKET)) {
+@@ -3276,7 +3328,7 @@ static abi_long do_socket(int domain, int type, int protocol)
+                 fd_trans_register(ret, &target_netlink_audit_trans);
+                 break;
+             default:
+-                g_assert_not_reached();
++                break;
+             }
+         }
+     }
+@@ -9021,6 +9073,60 @@ ssize_t do_guest_readlink(const char *pathname, char *buf, size_t bufsiz)
+     return ret;
+ }
+ 
++/*
++ * uu-plugin: a guest program that execs another guest binary (uuplugin
++ * starts xuplugin-guardian) would need binfmt_misc on the host.  Instead,
++ * re-exec this QEMU binary with the target program, like binfmt_misc with
++ * the P flag: "qemu -0 argv[0] path argv[1...]".
++ */
++static bool is_guest_elf(const char *path)
++{
++    unsigned char h[EI_NIDENT + 4];
++    uint16_t machine;
++    bool ret = false;
++    int fd = open(path, O_RDONLY | O_CLOEXEC);
++
++    if (fd < 0) {
++        return false;
++    }
++    if (read(fd, h, sizeof(h)) == sizeof(h) &&
++        memcmp(h, ELFMAG, SELFMAG) == 0 && h[EI_CLASS] == ELF_CLASS &&
++        h[EI_DATA] == ELFDATA2LSB) {
++        machine = h[EI_NIDENT + 2] | (h[EI_NIDENT + 3] << 8);
++        ret = machine == ELF_MACHINE;
++    }
++    close(fd);
++    return ret;
++}
++
++static int exec_under_qemu(const char *exe, char **argp, char **envp)
++{
++    static char qemu[PATH_MAX];
++    char **v;
++    int argc = 0, i, ret;
++    ssize_t n;
++
++    n = readlink("/proc/self/exe", qemu, sizeof(qemu) - 1);
++    if (n <= 0) {
++        return safe_execve(exe, argp, envp);
++    }
++    qemu[n] = 0;
++    while (argp[argc]) {
++        argc++;
++    }
++    v = g_new0(char *, argc + 5);
++    v[0] = qemu;
++    v[1] = (char *)"-0";
++    v[2] = argc ? argp[0] : (char *)exe;
++    v[3] = (char *)exe;
++    for (i = 1; i < argc; i++) {
++        v[i + 3] = argp[i];
++    }
++    ret = safe_execve(qemu, v, envp);
++    g_free(v);
++    return ret;
++}
++
+ static int do_execv(CPUArchState *cpu_env, int dirfd,
+                     abi_long pathname, abi_long guest_argp,
+                     abi_long guest_envp, int flags, bool is_execveat)
+@@ -9106,9 +9212,14 @@ static int do_execv(CPUArchState *cpu_env, int dirfd,
+     if (is_proc_myself(p, "exe")) {
+         exe = real_exec_path;
+     }
+-    ret = is_execveat
+-        ? safe_execveat(dirfd, exe, argp, envp, flags)
+-        : safe_execve(exe, argp, envp);
++    if ((!is_execveat || (dirfd == AT_FDCWD && !(flags & AT_EMPTY_PATH))) &&
++        is_guest_elf(exe)) {
++        ret = exec_under_qemu(exe, argp, envp);
++    } else {
++        ret = is_execveat
++            ? safe_execveat(dirfd, exe, argp, envp, flags)
++            : safe_execve(exe, argp, envp);
++    }
+     ret = get_errno(ret);
+ 
+     unlock_user(p, pathname, 0);

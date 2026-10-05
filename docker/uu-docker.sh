@@ -87,7 +87,7 @@ EOT
         sed -i "s/^productname=.*/productname=$model/" "$UU_FACTORYINFO"
         log "SN 文件 productname 由 ${cur:-空} 改为 $model（与本机架构匹配）"
     fi
-    log "架构: ${arch}（内核 $(uname -m)），H3C ${model} 版插件，SN $(factory_get manucode)"
+    log "架构: ${arch}（内核 $(uname -m)$([ -n "$(plugin_qemu "$arch")" ] && echo "，qemu 模拟运行")），H3C ${model} 版插件，SN $(factory_get manucode)"
 }
 
 check_env() {

@@ -26,4 +26,14 @@ Docker image (Docker on an arm64 host, container on a bridge network as the LAN)
   `docker stop` stops the plugin and dnsmasq cleanly
 - Not verified: an actual RouterOS device, macvlan (`docker-compose.yml`)
 
+amd64 image (QEMU emulation, see [x86_64](x86_64.md)):
+
+- Same image layout built for arm64 (the plugin still runs through the bundled `qemu-aarch64`): plugin downloaded, started under QEMU
+  together with the guardian (`/proc/PID/exe` is QEMU, process names `uuplugin` / `xuplugin-guardi`), logged in (`uu_status=0`),
+  plugin iptables rules added, `uuctl restart` and `docker stop` work
+- Patched vs. stock QEMU with a test program: `SO_MARK`, `IP_MTU`, `IP_TRANSPARENT`, `SO_ORIGINAL_DST` and `NETLINK_NETFILTER` only work with the patch;
+  TUN creation and interface ioctls work with both
+- CI runs [`docker/test-amd64.sh`](../docker/test-amd64.sh) on an x86_64 runner without binfmt_misc for aarch64
+- Not verified: real acceleration through the emulated plugin, CPU usage under game traffic
+
 **Not verified**: binding in the phone app and real game acceleration (requires a real LAN, a UU account and game devices); please test after deployment.

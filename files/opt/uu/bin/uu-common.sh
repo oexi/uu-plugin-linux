@@ -116,6 +116,12 @@ arch_ldso() {
     esac
 }
 
+# 需要模拟运行时输出 qemu-user 路径：amd64 Docker 镜像用打过补丁的 qemu-aarch64 运行 aarch64 插件
+# （补丁让插件拉起的 guardian 也经 qemu 运行，进程名仍是 uuplugin / xuplugin-guardi，见 docker/qemu/）
+plugin_qemu() {
+    [ -x "$UU_HOME/qemu/qemu-$1" ] && echo "$UU_HOME/qemu/qemu-$1"
+}
+
 # ELF 文件的架构：aarch64 / arm / 其它
 elf_arch() {
     case "$(od -An -tx1 -j18 -N2 "$1" 2>/dev/null | tr -d ' \n')" in
