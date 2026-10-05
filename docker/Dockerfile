@@ -33,6 +33,9 @@ COPY files/opt/uu/bin/ /opt/uu/bin/
 COPY files/opt/uu/shim/uu-shim /opt/uu/shim/
 COPY files/etc/uu/uu.conf /opt/uu/uu.conf.default
 COPY docker/uu-docker.sh /usr/local/bin/
+# 许可证和第三方声明（amd64 镜像里的 QEMU 是 GPL，补丁一并附上）
+COPY LICENSE THIRD_PARTY_NOTICES.md docker/qemu/qemu-user-uu.patch /usr/share/doc/uu-plugin-linux/
+COPY licenses/ /usr/share/doc/uu-plugin-linux/licenses/
 RUN for n in iptables ip6tables xtables-nft-multi brctl; do ln -s uu-shim "/opt/uu/shim/$n"; done \
     && ln -s /opt/uu/bin/uuctl /usr/local/bin/uuctl
 

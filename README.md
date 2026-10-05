@@ -68,3 +68,11 @@ sudo ./uninstall.sh            # keeps /etc/uu; add --purge to remove it
 - [Implementation notes](docs/implementation.md): file layout and porting details
 - [Troubleshooting](docs/troubleshooting.md)
 - [Testing](docs/testing.md): what has and has not been verified
+
+## License
+
+[MIT](LICENSE) for this project's scripts and docs. The QEMU patch is GPL-2.0-or-later, and the bundled runtime libraries
+and QEMU binary keep their own licenses, see [third-party notices](THIRD_PARTY_NOTICES.md).
+
+This project is not affiliated with or endorsed by NetEase or H3C. The UU plugin is NetEase's proprietary software;
+it is not included here and is downloaded from NetEase when the service starts.

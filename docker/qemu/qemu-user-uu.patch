@@ -1,3 +1,13 @@
+Patch for QEMU 11.1.2 linux-user, used to build qemu-aarch64 for the amd64 Docker image (see docs/x86_64.md):
+
+- pass socket options QEMU does not know (SO_MARK, SO_ORIGINAL_DST, IP_MTU, ...) and untranslated
+  netlink protocols to the kernel unchanged
+- execve of an aarch64 ELF re-runs the same QEMU binary, so no binfmt_misc is needed
+- set the process name to the emulated program's name
+
+Like QEMU's linux-user code, this patch is licensed under the GNU General Public License,
+version 2 or (at your option) any later version. See licenses/GPL-2.0.txt.
+
 diff --git a/linux-user/main.c b/linux-user/main.c
 index 60a695b..f64a404 100644
 --- a/linux-user/main.c

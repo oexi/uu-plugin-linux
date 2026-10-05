@@ -114,7 +114,8 @@ for n in iptables ip6tables xtables-nft-multi brctl; do
     ln -sf uu-shim "/opt/uu/shim/$n"
 done
 ln -sf /opt/uu/bin/uuctl /usr/local/bin/uuctl
-cp -f "$SRC/README.md" /opt/uu/README.md
+cp -f "$SRC/README.md" "$SRC/LICENSE" "$SRC/THIRD_PARTY_NOTICES.md" /opt/uu/
+rm -rf /opt/uu/licenses && cp -r "$SRC/licenses" /opt/uu/licenses
 rm -rf /opt/uu/docs && cp -r "$SRC/docs" /opt/uu/docs
 
 # ---------- 配置 ----------
