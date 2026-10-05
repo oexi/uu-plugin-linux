@@ -1,6 +1,6 @@
 # Docker image (RouterOS container)
 
-`ghcr.io/oexi/uu-plugin-linux:latest` (formerly `ghcr.io/oexi/uu-plugin-linux-arm64`, which still receives the same images for now) runs the same bypass gateway in a container, for platforms without systemd
+`ghcr.io/oexi/uu-plugin-linux:latest` runs the same bypass gateway in a container, for platforms without systemd
 such as RouterOS `/container`. It is a multi-arch image: `linux/arm64` (H3C NX30Pro plugin), `linux/arm/v7` (H3C BX54 plugin) and `linux/amd64`
 (H3C NX30Pro plugin emulated by QEMU, see [x86_64](x86_64.md)); the plugin is chosen by the image architecture, not the kernel.
 

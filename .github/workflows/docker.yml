@@ -8,8 +8,6 @@ on:
 
 env:
   REGISTRY_IMAGE: ghcr.io/${{ github.repository }}
-  # The repository was renamed from uu-plugin-linux-arm64; keep publishing the old image name for existing installs
-  LEGACY_IMAGE: ghcr.io/oexi/uu-plugin-linux-arm64
   # Only publish from the default branch and version tags; other branches just build
   PUSH: ${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
 
@@ -30,9 +28,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY_IMAGE }}
-            ${{ env.LEGACY_IMAGE }}
+          images: ${{ env.REGISTRY_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
