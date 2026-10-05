@@ -1,7 +1,8 @@
-# NetEase UU Accelerator Plugin (H3C router build) for Linux ARM
+# NetEase UU Accelerator Plugin (H3C router build) for Linux
 
-Runs the NetEase UU game accelerator plugin from H3C router firmware on a regular Linux ARM box
-(arm64 / armv7, systemd distributions such as Debian, Ubuntu, Armbian and Raspberry Pi OS).
+Runs the NetEase UU game accelerator plugin from H3C router firmware on a regular Linux box:
+natively on ARM (arm64 / armv7, systemd distributions such as Debian, Ubuntu, Armbian and Raspberry Pi OS),
+or as a Docker image on arm64, armv7 and x86_64.
 The box becomes a **UU bypass gateway**: point a device's gateway and DNS at it, then bind and accelerate the device in the UU console accelerator app.
 
 - Starts on boot, and checks for plugin updates on every start
@@ -22,8 +23,8 @@ The plugin binary is downloaded from NetEase on first start.
 ## Install
 
 ```sh
-git clone https://github.com/oexi/uu-plugin-linux-arm64.git
-cd uu-plugin-linux-arm64
+git clone https://github.com/oexi/uu-plugin-linux.git
+cd uu-plugin-linux
 sudo ./install.sh
 ```
 
@@ -31,7 +32,7 @@ Options: `--lan-if eth0` (LAN interface), `--factoryinfo FILE` (reuse an existin
 
 ### Docker
 
-Alternatively, run the multi-arch image `ghcr.io/oexi/uu-plugin-linux-arm64` (arm64, armv7, amd64), see [Docker image](docs/docker.md).
+Alternatively, run the multi-arch image `ghcr.io/oexi/uu-plugin-linux` (arm64, armv7, amd64), see [Docker image](docs/docker.md).
 On x86_64 (e.g. RouterOS x86 / CHR) this is the only option: the image runs the arm64 H3C plugin under QEMU, see [x86_64](docs/x86_64.md).
 
 ## Set up LAN devices

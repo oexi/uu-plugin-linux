@@ -1,6 +1,6 @@
 # Docker image (RouterOS container)
 
-`ghcr.io/oexi/uu-plugin-linux-arm64:latest` runs the same bypass gateway in a container, for platforms without systemd
+`ghcr.io/oexi/uu-plugin-linux:latest` (formerly `ghcr.io/oexi/uu-plugin-linux-arm64`, which still receives the same images for now) runs the same bypass gateway in a container, for platforms without systemd
 such as RouterOS `/container`. It is a multi-arch image: `linux/arm64` (H3C NX30Pro plugin), `linux/arm/v7` (H3C BX54 plugin) and `linux/amd64`
 (H3C NX30Pro plugin emulated by QEMU, see [x86_64](x86_64.md)); the plugin is chosen by the image architecture, not the kernel.
 
@@ -28,7 +28,7 @@ and a disk mounted as `usb1` (RouterOS 7.20+ syntax; on older versions use `name
 /container/mounts add list=uu src=/usb1/uu dst=/etc/uu
 
 /container/config set registry-url=https://ghcr.io tmpdir=/usb1/pull
-/container add remote-image=oexi/uu-plugin-linux-arm64:latest interface=veth-uu \
+/container add remote-image=oexi/uu-plugin-linux:latest interface=veth-uu \
     root-dir=/usb1/containers/uu mountlists=uu dns=192.168.88.1 logging=yes start-on-boot=yes
 /container start [find interface=veth-uu]
 ```

@@ -2,7 +2,7 @@
 # Note: with macvlan the Docker host itself cannot reach the container's IP (a macvlan limitation).
 services:
   uu:
-    image: ghcr.io/oexi/uu-plugin-linux-arm64:latest
+    image: ghcr.io/oexi/uu-plugin-linux:latest
     container_name: uu
     restart: unless-stopped
     cap_add:
