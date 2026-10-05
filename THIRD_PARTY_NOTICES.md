@@ -1,5 +1,12 @@
 # Third-party notices
 
+The [MIT License](LICENSE) covers the scripts, configuration, Dockerfile and documentation written for this project. It does not cover:
+
+- [`docker/qemu/qemu-user-uu.patch`](docker/qemu/qemu-user-uu.patch), a modification of QEMU, licensed under the
+  GNU General Public License version 2 or later ([GPL-2.0.txt](licenses/GPL-2.0.txt))
+- the third-party software listed below
+- the NetEase UU plugin, which is not part of this project (see [Not included](#not-included))
+
 This project redistributes the following third-party software, unmodified unless noted.
 Their licenses are in [`licenses/`](licenses/).
 
